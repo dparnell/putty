@@ -9,7 +9,8 @@
 #include "putty.h"
 
 typedef struct console_backend_data {
-    HANDLE port;
+	HANDLE shell_in_w;
+	HANDLE shell_out_r;
     struct handle *out, *in;
     void *frontend;
     int bufsize;
@@ -25,10 +26,14 @@ static void console_terminate(Console console)
 	handle_free(console->in);
 	console->in = NULL;
     }
-    if (console->port != INVALID_HANDLE_VALUE) {
-	CloseHandle(console->port);
-	console->port = INVALID_HANDLE_VALUE;
+    if (console->shell_in_w != INVALID_HANDLE_VALUE) {
+	CloseHandle(console->shell_in_w);
+	console->shell_in_w = INVALID_HANDLE_VALUE;
     }
+	if (console->shell_out_r != INVALID_HANDLE_VALUE) {
+		CloseHandle(console->shell_out_r);
+		console->shell_out_r = INVALID_HANDLE_VALUE;
+	}
 }
 
 static int console_gotdata(struct handle *h, void *data, int len)
@@ -81,13 +86,6 @@ static void console_sentdata(struct handle *h, int new_backlog)
     }
 }
 
-static const char *console_configure(Console console, HANDLE serport, Conf *conf)
-{
-	/* Do nothing for now */
-
-    return NULL;
-}
-
 /*
  * Called to set up the console connection.
  * 
@@ -101,71 +99,69 @@ static const char *console_init(void *frontend_handle, void **backend_handle,
 			       char **realhost, int nodelay, int keepalive)
 {
     Console console;
-    HANDLE serport;
-    const char *err;
-    char *serline;
+    HANDLE shell_in_r;
+	HANDLE shell_in_w;
+	HANDLE shell_out_r;
+	HANDLE shell_out_w;
+	HANDLE shell_err_w;
+	const char *err;
+    char *shell;
+	SECURITY_ATTRIBUTES saAttr;
+	PROCESS_INFORMATION piProcInfo;
+	STARTUPINFO siStartInfo;
 
-    console = snew(struct console_backend_data);
-    console->port = INVALID_HANDLE_VALUE;
-    console->out = console->in = NULL;
-    console->bufsize = 0;
-    *backend_handle = console;
+	saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+	saAttr.bInheritHandle = TRUE;
+	saAttr.lpSecurityDescriptor = NULL;
 
-    console->frontend = frontend_handle;
+	if (!CreatePipe(&shell_out_r, &shell_out_w, &saAttr, 0))
+		return "Unable to open output pipe";
+	if (!SetHandleInformation(shell_out_r, HANDLE_FLAG_INHERIT, 0))
+		return "Setting out handle inheritance failed";
+	if (!CreatePipe(&shell_in_r, &shell_in_w, &saAttr, 0))
+		return "Unable to open input pipe";
+	if (!SetHandleInformation(shell_in_w, HANDLE_FLAG_INHERIT, 0))
+		return "Setting in handle inheritance failed";
 
-    serline = conf_get_str(conf, CONF_serline);
-    {
-	char *msg = dupprintf("Opening console device %s", serline);
-	logevent(console->frontend, msg);
-    }
+	if (!DuplicateHandle(GetCurrentProcess(), shell_out_w, GetCurrentProcess(), &shell_err_w, 0, TRUE, DUPLICATE_SAME_ACCESS)) {
+		return "Unable to create stderr output handle";
+	}
 
-    {
-	/*
-	 * Munge the string supplied by the user into a Windows filename.
-	 *
-	 * Windows supports opening a few "legacy" devices (including
-	 * COM1-9) by specifying their names verbatim as a filename to
-	 * open. (Thus, no files can ever have these names. See
-	 * <http://msdn2.microsoft.com/en-us/library/aa365247.aspx>
-	 * ("Naming a File") for the complete list of reserved names.)
-	 *
-	 * However, this doesn't let you get at devices COM10 and above.
-	 * For that, you need to specify a filename like "\\.\COM10".
-	 * This is also necessary for special console and console-like
-	 * devices such as \\.\WCEUSBSH001. It also works for the "legacy"
-	 * names, so you can do \\.\COM1 (verified as far back as Win95).
-	 * See <http://msdn2.microsoft.com/en-us/library/aa363858.aspx>
-	 * (CreateFile() docs).
-	 *
-	 * So, we believe that prepending "\\.\" should always be the
-	 * Right Thing. However, just in case someone finds something to
-	 * talk to that doesn't exist under there, if the console line
-	 * contains a backslash, we use it verbatim. (This also lets
-	 * existing configurations using \\.\ continue working.)
-	 */
-	char *serfilename =
-	    dupprintf("%s%s", strchr(serline, '\\') ? "" : "\\\\.\\", serline);
-	serport = CreateFile(serfilename, GENERIC_READ | GENERIC_WRITE, 0, NULL,
-			     OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
-	sfree(serfilename);
-    }
+	ZeroMemory(&piProcInfo, sizeof(PROCESS_INFORMATION));
+	ZeroMemory(&siStartInfo, sizeof(STARTUPINFO));
+	siStartInfo.cb = sizeof(STARTUPINFO);
+	siStartInfo.hStdError = shell_err_w;
+	siStartInfo.hStdOutput = shell_out_w;
+	siStartInfo.hStdInput = shell_in_r;
+	siStartInfo.dwFlags = STARTF_USESTDHANDLES;
 
-    if (serport == INVALID_HANDLE_VALUE)
-	return "Unable to open console port";
+	console = snew(struct console_backend_data);
+	console->shell_in_w = shell_in_w;
+	console->shell_out_r = shell_out_r;
+	console->out = console->in = NULL;
+	console->bufsize = 0;
+	*backend_handle = console;
 
-    err = console_configure(console, serport, conf);
-    if (err)
-	return err;
+	console->frontend = frontend_handle;
 
-    console->port = serport;
-    console->out = handle_output_new(serport, console_sentdata, console,
+	shell = conf_get_str(conf, CONF_shell);
+	{
+		char *msg = dupprintf("Starting shell %s", shell);
+		logevent(console->frontend, msg);
+	}
+
+	if (!CreateProcess(NULL, shell, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &siStartInfo, &piProcInfo)) {
+		return "Unable to create shell process";
+	}
+
+    console->out = handle_output_new(shell_in_w, console_sentdata, console,
 				    HANDLE_FLAG_OVERLAPPED);
-    console->in = handle_input_new(serport, console_gotdata, console,
+    console->in = handle_input_new(shell_out_r, console_gotdata, console,
 				  HANDLE_FLAG_OVERLAPPED |
 				  HANDLE_FLAG_IGNOREEOF |
 				  HANDLE_FLAG_UNITBUFFER);
 
-    *realhost = dupstr(serline);
+    *realhost = dupstr(shell);
 
     /*
      * Specials are always available.
@@ -186,14 +182,7 @@ static void console_free(void *handle)
 
 static void console_reconfig(void *handle, Conf *conf)
 {
-    Console console = (Console) handle;
-    const char *err;
-
-    err = console_configure(console, console->port, conf);
-
-    /*
-     * FIXME: what should we do if err returns something?
-     */
+	/* do nothing */
 }
 
 /*
@@ -291,7 +280,7 @@ static void console_provide_logctx(void *handle, void *logctx)
 static int console_exitcode(void *handle)
 {
     Console console = (Console) handle;
-    if (console->port != INVALID_HANDLE_VALUE)
+    if (console->shell_in_w != INVALID_HANDLE_VALUE)
         return -1;                     /* still connected */
     else
         /* Exit codes are a meaningless concept with console ports */

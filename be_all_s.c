@@ -28,5 +28,6 @@ Backend *backends[] = {
     &rlogin_backend,
     &raw_backend,
     &serial_backend,
+	&console_backend,
     NULL
 };

@@ -1414,6 +1414,7 @@ void setup_config_box(struct controlbox *b, int midsession,
 			      "Raw", 'w', I(PROT_RAW),
 			      "Telnet", 't', I(PROT_TELNET),
 			      "Rlogin", 'i', I(PROT_RLOGIN),
+			      "Console", "c", I(PROT_CONSOLE),
 			      NULL);
 	} else {
 	    ctrl_radiobuttons(s, "Connection type:", NO_SHORTCUT, 4,
@@ -1423,7 +1424,8 @@ void setup_config_box(struct controlbox *b, int midsession,
 			      "Telnet", 't', I(PROT_TELNET),
 			      "Rlogin", 'i', I(PROT_RLOGIN),
 			      "SSH", 's', I(PROT_SSH),
-			      NULL);
+			      "Console", "c", I(PROT_CONSOLE),
+			NULL);
 	}
     }
 

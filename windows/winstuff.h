@@ -537,6 +537,11 @@ void agent_schedule_callback(void (*callback)(void *, void *, int),
 extern Backend serial_backend;
 
 /*
+ * Exports from wincon.c.
+ */
+extern Backend console_backend;
+
+/*
  * Exports from winjump.c.
  */
 #define JUMPLIST_SUPPORTED             /* suppress #defines in putty.h */

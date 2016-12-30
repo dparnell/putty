@@ -150,7 +150,7 @@ static const char *console_init(void *frontend_handle, void **backend_handle,
 		logevent(console->frontend, msg);
 	}
 
-	if (!CreateProcess(NULL, shell, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &siStartInfo, &piProcInfo)) {
+	if (!CreateProcess(NULL, shell, NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP, NULL, NULL, &siStartInfo, &piProcInfo)) {
 		return "Unable to create shell process";
 	}
 

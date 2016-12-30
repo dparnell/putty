@@ -1076,6 +1076,7 @@ void load_open_settings(void *sesskey, Conf *conf)
     gppi(sesskey, "ConnectionSharingUpstream", 1, conf, CONF_ssh_connection_sharing_upstream);
     gppi(sesskey, "ConnectionSharingDownstream", 1, conf, CONF_ssh_connection_sharing_downstream);
     gppmap(sesskey, "SSHManualHostKeys", conf, CONF_ssh_manual_hostkeys);
+	gpps(sesskey, "ConsoleShell", "cmd.exe", conf, CONF_shell);
 }
 
 void do_defaults(const char *session, Conf *conf)

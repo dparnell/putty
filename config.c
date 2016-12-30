@@ -165,7 +165,10 @@ static void config_host_handler(union control *ctrl, void *dlg,
      * different places depending on the protocol.
      */
     if (event == EVENT_REFRESH) {
-	if (conf_get_int(conf, CONF_protocol) == PROT_SERIAL) {
+		if (conf_get_int(conf, CONF_protocol) == PROT_CONSOLE) {
+			dlg_label_change(ctrl, dlg, "Console Shell");
+			dlg_editbox_set(ctrl, dlg, conf_get_str(conf, CONF_shell));
+	} else if (conf_get_int(conf, CONF_protocol) == PROT_SERIAL) {
 	    /*
 	     * This label text is carefully chosen to contain an n,
 	     * since that's the shortcut for the host name control.
@@ -1414,7 +1417,7 @@ void setup_config_box(struct controlbox *b, int midsession,
 			      "Raw", 'w', I(PROT_RAW),
 			      "Telnet", 't', I(PROT_TELNET),
 			      "Rlogin", 'i', I(PROT_RLOGIN),
-			      "Console", "c", I(PROT_CONSOLE),
+			      "Shell", "e", I(PROT_CONSOLE),
 			      NULL);
 	} else {
 	    ctrl_radiobuttons(s, "Connection type:", NO_SHORTCUT, 4,
@@ -1424,7 +1427,7 @@ void setup_config_box(struct controlbox *b, int midsession,
 			      "Telnet", 't', I(PROT_TELNET),
 			      "Rlogin", 'i', I(PROT_RLOGIN),
 			      "SSH", 's', I(PROT_SSH),
-			      "Console", "c", I(PROT_CONSOLE),
+			      "Shell", "e", I(PROT_CONSOLE),
 			NULL);
 	}
     }

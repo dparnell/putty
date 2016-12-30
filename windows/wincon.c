@@ -194,8 +194,12 @@ static int console_send(void *handle, const char *buf, int len)
 
     if (console->out == NULL)
 	return 0;
-
-    console->bufsize = handle_write(console->out, buf, len);
+	if (buf[0] == '\r' && len == 1) {
+		console->bufsize = handle_write(console->out, "\n", 1);
+	}
+	else {
+		console->bufsize = handle_write(console->out, buf, len);
+	}
     return console->bufsize;
 }
 
